@@ -12,12 +12,15 @@ class Business {
         this.currentPeer = {}
 
         this.peers = new Map()
+        this.usersRecordings = new Map()
     }
     static initialize(deps) {
         const instance = new Business(deps)
         return instance._init()
     }
     async _init() {
+        this.view.configureRecordButton(this.onRecordPressed.bind(this))
+
         this.currentStream = await this.media.getCamera()
         this.socket = this.socketBuilder
             .setOnUserConnected(this.onUserConnected())
@@ -29,12 +32,20 @@ class Business {
             .setOnConnectionOpened(this.onPeerConnectionOpened())
             .setOnCallReceived(this.onPeerCallReceived())
             .setOnPeerStreamReceived(this.onPeerStreamReceived())
+            .setOnCallError(this.onPeerCallError())
+            .setOnCallClose(this.onPeerCallClose())
             .build()
         
-        this.addVideoStream('test01')
+        this.addVideoStream(this.currentPeer.id)
     }
 
     addVideoStream(userId, stream = this.currentStream) {
+        const recorderInstance = new Recorder(userId, stream)
+        this.usersRecordings.set(recorderInstance.filename, recorderInstance)
+        if(this.recordingEnable) {
+            recorderInstance.startRecording()
+        }
+
         const isCurrentId = false
         this.view.renderVideo({
             userId,
@@ -43,26 +54,34 @@ class Business {
         })
     }
 
-    onUserConnected = function() {
+    onUserConnected () {
         return userId => {
             console.log('user connected!', userId)
             this.currentPeer.call(userId, this.currentStream)
         }
     }
 
-    onUserDisconnected = function() {
+    onUserDisconnected () {
         return userId => {
             console.log('user disconnected!', userId)
+
+            if(this.peers.has(userId)) {
+                this.peers.get(userId).call.close()
+                this.peers.delete(userId)
+            }
+
+            this.view.setParticipants(this.peers.size)
+            this.view.removeVideoElement(userId)
         }
     }
 
-    onPeerError = function () {
+    onPeerError () {
         return error => {
             console.error('error on peer!', error)
         }
     }
 
-    onPeerConnectionOpened = function () {
+    onPeerConnectionOpened () {
         return (peer) => {
             const id = peer.id
             console.log('peer!!!', peer)
@@ -70,19 +89,60 @@ class Business {
         }
     }
 
-    onPeerCallReceived = function () {
+    onPeerCallReceived () {
         return call => {
             console.log('awsering call', call)
             call.answer(this.currentStream)
         }
     }
 
-    onPeerStreamReceived = function () {
+    onPeerStreamReceived () {
         return (call, stream) => {
             const callerId = call.peer
             this.addVideoStream(callerId, stream)
             this.peers.set(callerId, { call })
             this.view.setParticipants(this.peers.size)
+        }
+    }
+
+    onPeerCallError () {
+        return (call, error) => {
+            console.log('an call error ocurred', error)
+            this.view.removeVideoElement(call.peer)
+        }
+    }
+
+    onPeerCallClose () {
+        return (call) => {
+            console.log('call closed', call.peer)
+        }
+    }
+
+    onRecordPressed(recordingEnable) {
+        this.recordingEnable = recordingEnable
+        console.log("pressionou", recordingEnable)
+        for( const [key, value] of this.usersRecordings) {
+            if(this.recordingEnable) {
+                value.startRecording()
+                continue;
+            }
+            this.stopRecording(key)
+        }
+    }
+
+    // se um usuário entrar e sair da call durante uma gravação
+    // precisamos parar as gravações anteriores dele
+    async stopRecording(userId) {
+        const usersRecordings = this.usersRecordings
+        for( const [key, value] of usersRecordings) {
+            const isContextUser = key.includes(userId)
+            if(!isContextUser) continue;
+
+            const rec = value
+            const isRecordingActive = rec.recordingActive
+            if(!isRecordingActive) continue;
+
+            await rec.stopRecording()
         }
     }
 }
