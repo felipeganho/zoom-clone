@@ -64,4 +64,27 @@ class Recorder {
         this.completeRecording.push([...this.recordedBlobs])
         this.recordedBlobs = []
     }
+
+    getAllVideoURLs() {
+        return this.completeRecording.map(recording => {
+            const superBuffer = new Blob(recording, { type: this.videoType })
+            
+            return window.URL.createObjectURL(superBuffer)
+        })
+    }
+
+    download() {
+        if(!this.completeRecording.length) return;
+
+        for(const recording of this.completeRecording) {
+            const blob = new Blob(recording, { type: this.videoType })
+            const url = window.URL.createObjectURL(blob)
+            const a = document.createElement('a')
+            a.style.display = 'none'
+            a.href = url
+            a.download = `${this.filename}.webm`
+            document.body.appendChild(a)
+            a.click()
+        }
+    }
 }
