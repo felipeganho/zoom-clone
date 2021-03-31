@@ -11,6 +11,9 @@ $ cd zoom-clone
 # Abra o projeto com o VSCode
 $ .code 
 
+# Abra cada pasta (como feito abaixo) em rode:
+$ npm ci --silent
+
 # Abra a pasta /public em um terminal e rode:
 $ npm start
 
